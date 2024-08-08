@@ -1,6 +1,14 @@
 import {NextResponse} from 'next/server'
 import OpenAI from 'openai'
 
+// Hardcoded responses for Level 1
+const responses = {
+    "hello": "Hi there! How can I help you?",
+    "what is HeadStartAI?": "HeadStartAI is a platform that provides AI-driven interviews for software engineers.",
+    "how can I sign up?": "You can sign up on our website or through our mobile app.",
+    "default": "I'm sorry, I didn't understand that. Can you please rephrase?",
+};
+
 const systemPrompt = `You are an AI-powered customer support assistant for HeadStartAI, a platform that provides AI-driven interviews for software engineers.
 1. HeadStartAI offers AI-powered interviews for software engineering positions.
 2. Our platform helps candidates practice and prepare for real job interviews. 
@@ -15,6 +23,13 @@ Your goal is to provide accurate information, assist with common inquiries, and 
 export async function POST(req) {
     const openai = new OpenAI()
     const data = await req.json()
+    const userMessage = data[data.length - 1].content.toLowerCase();
+
+    // Level 1: Hardcoded responses
+    if (process.env.CHATBOT_LEVEL === "1") {
+        const reply = responses[userMessage] || responses["default"];
+        return NextResponse.json([{ role: "assistant", content: reply }]);
+    }
 
     const completion = await openai.chat.completions.create({
         messages: [

@@ -1,6 +1,6 @@
 'use client'
 import {Box, Stack, TextField, Button} from '@mui/material'
-import Image from "next/image";
+//import Image from "next/image";
 import {useState} from 'react'
 
 export default function Home() {
@@ -68,7 +68,18 @@ export default function Home() {
         },
         body: JSON.stringify([...messages, { role: 'user', content: currentMessage }])
       })
+
+      // Check if the response is a stream or a direct JSON response
+      const contentType = response.headers.get('Content-Type');
   
+      if (contentType && contentType.includes('application/json')) {
+        // Handle direct JSON response (e.g., for hardcoded responses)
+        const reply = await response.json();
+        setMessages((messages) => [
+          ...messages.slice(0, messages.length - 1), // Remove the empty assistant message
+          { role: "assistant", content: reply[0].content },
+        ]);
+      } else {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let result = ''
@@ -90,7 +101,7 @@ export default function Home() {
           ]
         })
         return reader.read().then(processText)
-      })
+      })}
     } catch (error) {
       console.error('Error:', error)
     }
