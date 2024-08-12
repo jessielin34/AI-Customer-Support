@@ -1,12 +1,15 @@
-import {NextResponse} from 'next/server'
-import OpenAI from 'openai'
+import { NextResponse } from "next/server";
+import OpenAI from "openai";
+import { detectLanguage } from "./languageDetection";
 
 // Hardcoded responses for Level 1
 const responses = {
-    "hello": "Hi there! How can I help you?",
-    "what is HeadStartAI?": "HeadStartAI is a platform that provides AI-driven interviews for software engineers.",
-    "how can I sign up?": "You can sign up on our website or through our mobile app.",
-    "default": "I'm sorry, I didn't understand that. Can you please rephrase?",
+  hello: "Hi there! How can I help you?",
+  "what is HeadStartAI?":
+    "HeadStartAI is a platform that provides AI-driven interviews for software engineers.",
+  "how can I sign up?":
+    "You can sign up on our website or through our mobile app.",
+  default: "I'm sorry, I didn't understand that. Can you please rephrase?",
 };
 
 const systemPrompt = `You are an AI-powered customer support assistant for HeadStartAI, a platform that provides AI-driven interviews for software engineers.
@@ -17,49 +20,50 @@ const systemPrompt = `You are an AI-powered customer support assistant for HeadS
 5. If asked about technical issues, guide users to our troubleshooting page or suggest contacting our technical support team.
 6. Always maintain user privacy and do not share personal information.
 7. If you're unsure about any information, it's okay to say you don't know and offer to connect the user with a human representative.
+8. Respond in the same language as the user's input
 
-Your goal is to provide accurate information, assist with common inquiries, and ensure a positive experience for all HeadStartAI users.`
+Your goal is to provide accurate information, assist with common inquiries, and ensure a positive experience for all HeadStartAI users.`;
 
 export async function POST(req) {
-    const openai = new OpenAI()
-    const data = await req.json()
-    const userMessage = data[data.length - 1].content.toLowerCase();
+  const openai = new OpenAI();
+  const data = await req.json();
+  const userMessage = data[data.length - 1].content.toLowerCase();
+  const detectedLanguage = await detectLanguage(userMessage);
 
-    // Level 1: Hardcoded responses
-    if (process.env.CHATBOT_LEVEL === "1") {
-        const reply = responses[userMessage] || responses["default"];
-        return NextResponse.json([{ role: "assistant", content: reply }]);
-    }
+  // Level 1: Hardcoded responses
+  if (process.env.CHATBOT_LEVEL === "1") {
+    const reply =
+      (responses[userMessage] && responses[userMessage][detectedLanguage]) ||
+      responses["default"][detectedLanguage] ||
+      responses["default"]["en"];
+    return NextResponse.json([{ role: "assistant", content: reply }]);
+  }
 
-    const completion = await openai.chat.completions.create({
-        messages: [
-            {
-            role: 'system', content: systemPrompt
-            },
-            ...data,
-        ],
-        model: 'gpt-4o-mini',
-        stream: true, 
-    })
+  const contextualPrompt = `${systemPrompt}\nLanguage: ${detectedLanguage}`;
 
-    const stream = new ReadableStream({
-        async start(controller) {
-            const encoder = new TextEncoder()
-            try {
-                for await (const chunk of completion) {
-                    const content = chunk.choices[0]?.delta?.content
-                    if (content){
-                        const text = encoder.encode(content)
-                        controller.enqueue(text)
-                    }
-                }
-            }
-            catch (err) {
-                controller.error(err)
-            } finally {
-                controller.close()
-            }
+  const completion = await openai.chat.completions.create({
+    messages: [{ role: "system", content: contextualPrompt }, ...data],
+    model: "gpt-4o-mini",
+    stream: true,
+  });
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      try {
+        for await (const chunk of completion) {
+          const content = chunk.choices[0]?.delta?.content;
+          if (content) {
+            const text = encoder.encode(content);
+            controller.enqueue(text);
+          }
         }
-    })
-    return new NextResponse(stream)
+      } catch (err) {
+        controller.error(err);
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new NextResponse(stream);
 }
